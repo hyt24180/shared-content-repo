@@ -1,5 +1,5 @@
-1,azer,azer12,undefined,false,
-2,azerrt,azeqsd,undefined,false,
-3,azscript,azer1234,undefined,false,
-4,asis,azerqsdf,undefined,false,
-5,azer11,azerqsdf,xhkhckchixfugyxgxy@gmail.com,false,5f11756a-4d9e-40cd-b733-98aca9092484
+1,azer,azer12,offline
+2,azerrt,azeqsd,offline
+3,azscript,azer1234,online
+4,asis,azerqsdf,offline
+5,azer11,azerqsdf,offline
