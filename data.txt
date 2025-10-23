@@ -1,6 +1,6 @@
 1,azer,azer12,offline
 2,azerrt,azeqsd,offline
-3,script,123456,online
+3,azscript,123456,online
 4,asis,azerqsdf,offline
 5,azer11,azerqsdf,offline
 6,azerqsdf,azerqsdf,offline
