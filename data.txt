@@ -1,5 +1,5 @@
 1,azer,azer12,offline
 2,azerrt,azeqsd,offline
-3,azscript,azer1234,online
+3,azscript,azer1234,offline
 4,asis,azerqsdf,offline
 5,azer11,azerqsdf,offline
