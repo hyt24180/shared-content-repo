@@ -1,10 +1,8 @@
-{
-  "users": [
-    {
-      "id": 1,
-      "username": "azscript",
-      "password": "azer1234",
-      "email": "xhkhckchixfugyxgxy@gmail.com"
-    }
-  ]
-}
+[
+  {
+    "username": "azscrip",
+    "password": "azer1234",
+    "email": "uhyuhhh245@gmail.com",
+    "id": 1
+  }
+]
