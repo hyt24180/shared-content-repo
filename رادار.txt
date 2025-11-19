@@ -1,0 +1,353 @@
+--[[
+    Developed based on the Universal Radar ESP script by the original author
+    Original script: https://scriptblox.com/script/Universal-Script-radar-esp-41604
+    
+    Modifications made to my script:
+    - Added North, South, West, and East directions
+    - Added drag functionality for the radar
+    - Made some improvements to the radar
+    
+    Issues:
+    I don't know what the problem is, but you don't appear on the map, but I don't have time to fix this issue
+    
+    I am not the original developer of the basic radar system, I only made improvements.
+]]
+
+local Players = game:service("Players")
+local Player = Players.LocalPlayer
+local Mouse = Player:GetMouse()
+local Camera = game:service("Workspace").CurrentCamera
+local RS = game:service("RunService")
+local UIS = game:service("UserInputService")
+local GuiService = game:service("GuiService")
+
+if game:GetService("CoreGui"):FindFirstChild("RadarSystemGui") then
+    local existingGui = game:GetService("CoreGui"):FindFirstChild("RadarSystemGui")
+    if existingGui:FindFirstChild("ControlFrame") then
+        existingGui.ControlFrame.Visible = true
+    end
+    return
+end
+
+repeat wait() until Player.Character ~= nil and Player.Character.PrimaryPart ~= nil
+
+local LerpColorModule = loadstring(game:HttpGet("https://pastebin.com/raw/wRnsJeid"))()
+local HealthBarLerp = LerpColorModule:Lerp(Color3.fromRGB(255, 0, 0), Color3.fromRGB(0, 255, 0))
+
+local function NewCircle(Transparency, Color, Radius, Filled, Thickness)
+    local c = Drawing.new("Circle")
+    c.Transparency = Transparency
+    c.Color = Color
+    c.Visible = false
+    c.Thickness = Thickness
+    c.Position = Vector2.new(0, 0)
+    c.Radius = Radius
+    c.NumSides = math.clamp(Radius*55/100, 10, 75)
+    c.Filled = Filled
+    return c
+end
+
+local function NewLine(Transparency, Color, Thickness)
+    local l = Drawing.new("Line")
+    l.Transparency = Transparency
+    l.Color = Color
+    l.Visible = false
+    l.Thickness = Thickness
+    l.From = Vector2.new(0, 0)
+    l.To = Vector2.new(0, 0)
+    return l
+end
+
+local function NewText(Transparency, Color, Text, Size, Center)
+    local t = Drawing.new("Text")
+    t.Transparency = Transparency
+    t.Color = Color
+    t.Visible = false
+    t.Text = Text
+    t.Size = Size
+    t.Center = Center
+    t.Position = Vector2.new(0, 0)
+    return t
+end
+
+local RadarInfo = {
+    Position = Camera.ViewportSize / 2,
+    Radius = 60, 
+    Scale = 1,
+    RadarBack = Color3.fromRGB(10, 10, 10),
+    RadarBorder = Color3.fromRGB(75, 75, 75),
+    LocalPlayerDot = Color3.fromRGB(255, 255, 255),
+    PlayerDot = Color3.fromRGB(60, 170, 255),
+    Team = Color3.fromRGB(0, 255, 0),
+    Enemy = Color3.fromRGB(255, 0, 0),
+    Health_Color = true,
+    Team_Check = true,
+    ScanLine = Color3.fromRGB(0, 255, 0),
+    DirectionText = Color3.fromRGB(255, 255, 255)
+}
+
+local RadarBackground = NewCircle(0.9, RadarInfo.RadarBack, RadarInfo.Radius, true, 1)
+RadarBackground.Visible = true
+RadarBackground.Position = RadarInfo.Position
+
+local RadarInnerCircle = NewCircle(0.75, RadarInfo.RadarBorder, RadarInfo.Radius * 0.33, false, 1)
+RadarInnerCircle.Visible = true
+RadarInnerCircle.Position = RadarInfo.Position
+
+local RadarMidCircle = NewCircle(0.75, RadarInfo.RadarBorder, RadarInfo.Radius * 0.66, false, 1)
+RadarMidCircle.Visible = true
+RadarMidCircle.Position = RadarInfo.Position
+
+local RadarBorder = NewCircle(0.75, RadarInfo.RadarBorder, RadarInfo.Radius, false, 3)
+RadarBorder.Visible = true
+RadarBorder.Position = RadarInfo.Position
+
+local CrosshairH = NewLine(0.5, RadarInfo.RadarBorder, 1)
+CrosshairH.Visible = true
+
+local CrosshairV = NewLine(0.5, RadarInfo.RadarBorder, 1)
+CrosshairV.Visible = true
+
+local LetterOffsets = {
+    North = Vector2.new(0, -(RadarInfo.Radius + 15)),
+    South = Vector2.new(0, (RadarInfo.Radius + 15)),
+    East = Vector2.new((RadarInfo.Radius + 15), 0),
+    West = Vector2.new(-(RadarInfo.Radius + 15), 0)
+}
+
+local NorthText = NewText(0.75, RadarInfo.DirectionText, "N", 14, true)
+NorthText.Visible = true
+
+local SouthText = NewText(0.75, RadarInfo.DirectionText, "S", 14, true)
+SouthText.Visible = true
+
+local EastText = NewText(0.75, RadarInfo.DirectionText, "E", 14, true)
+EastText.Visible = true
+
+local WestText = NewText(0.75, RadarInfo.DirectionText, "W", 14, true)
+WestText.Visible = true
+
+local ScanLine = NewLine(0.5, RadarInfo.ScanLine, 1)
+ScanLine.Visible = true
+ScanLine.From = RadarInfo.Position
+ScanLine.To = RadarInfo.Position + Vector2.new(0, -RadarInfo.Radius)
+
+local scanAngle = 0
+
+local function GetRelative(pos)
+    local char = Player.Character
+    if char ~= nil and char.PrimaryPart ~= nil then
+        local pmpart = char.PrimaryPart
+        local camerapos = Vector3.new(Camera.CFrame.Position.X, pmpart.Position.Y, Camera.CFrame.Position.Z)
+        local newcf = CFrame.new(pmpart.Position, camerapos)
+        local r = newcf:PointToObjectSpace(pos)
+        return r.X, r.Z
+    else
+        return 0, 0
+    end
+end
+
+local function PlaceDot(plr)
+    local PlayerDot = NewCircle(1, RadarInfo.PlayerDot, 3, true, 1)
+
+    local function Update()
+        local c 
+        c = game:service("RunService").RenderStepped:Connect(function()
+            local char = plr.Character
+            if char and char:FindFirstChildOfClass("Humanoid") and char.PrimaryPart ~= nil and char:FindFirstChildOfClass("Humanoid").Health > 0 then
+                local hum = char:FindFirstChild("Humanoid")
+                local scale = RadarInfo.Scale
+                local relx, rely = GetRelative(char.PrimaryPart.Position)
+                local newpos = RadarInfo.Position - Vector2.new(relx * scale, rely * scale) 
+                
+                if (newpos - RadarInfo.Position).magnitude < RadarInfo.Radius-2 then 
+                    PlayerDot.Radius = 3   
+                    PlayerDot.Position = newpos
+                    PlayerDot.Visible = true
+                else 
+                    local dist = (RadarInfo.Position - newpos).magnitude
+                    local calc = (RadarInfo.Position - newpos).unit * (dist - RadarInfo.Radius)
+                    local inside = Vector2.new(newpos.X + calc.X, newpos.Y + calc.Y)
+                    PlayerDot.Radius = 2
+                    PlayerDot.Position = inside
+                    PlayerDot.Visible = true
+                end
+
+                PlayerDot.Color = RadarInfo.PlayerDot
+                if RadarInfo.Team_Check then
+                    if plr.TeamColor == Player.TeamColor then
+                        PlayerDot.Color = RadarInfo.Team
+                    else
+                        PlayerDot.Color = RadarInfo.Enemy
+                    end
+                end
+
+                if RadarInfo.Health_Color then
+                    PlayerDot.Color = HealthBarLerp(hum.Health / hum.MaxHealth)
+                end
+            else 
+                PlayerDot.Visible = false
+                if Players:FindFirstChild(plr.Name) == nil then
+                    PlayerDot:Remove()
+                    c:Disconnect()
+                end
+            end
+        end)
+    end
+    coroutine.wrap(Update)()
+end
+
+for _,v in pairs(Players:GetChildren()) do
+    if v.Name ~= Player.Name then
+        PlaceDot(v)
+    end
+end
+
+-- === إنشاء واجهة التحكم ===
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "RadarSystemGui"
+ScreenGui.Parent = game:GetService("CoreGui")
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+local ControlFrame = Instance.new("Frame")
+ControlFrame.Name = "ControlFrame"
+ControlFrame.Parent = ScreenGui
+ControlFrame.Size = UDim2.new(0, 150, 0, 150)
+ControlFrame.Position = UDim2.new(0, 10, 0, 100)
+ControlFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+ControlFrame.BorderSizePixel = 0
+ControlFrame.Active = true
+ControlFrame.Draggable = true
+
+local function createButton(name, pos)
+    local btn = Instance.new("TextButton")
+    btn.Name = name
+    btn.Parent = ControlFrame
+    btn.Size = UDim2.new(0, 40, 0, 40)
+    btn.Position = pos
+    btn.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
+    btn.BorderSizePixel = 0
+    btn.Font = Enum.Font.GothamBold
+    btn.Text = name
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.TextSize = 18
+    return btn
+end
+
+local moveDistance = 15
+
+local UpButton = createButton("↑", UDim2.new(0.5, -20, 0, 10))
+UpButton.Activated:Connect(function()
+    RadarInfo.Position = RadarInfo.Position + Vector2.new(0, -moveDistance)
+end)
+
+local DownButton = createButton("↓", UDim2.new(0.5, -20, 1, -50))
+DownButton.Activated:Connect(function()
+    RadarInfo.Position = RadarInfo.Position + Vector2.new(0, moveDistance)
+end)
+
+local LeftButton = createButton("←", UDim2.new(0, 10, 0.5, -20))
+LeftButton.Activated:Connect(function()
+    RadarInfo.Position = RadarInfo.Position + Vector2.new(-moveDistance, 0)
+end)
+
+local RightButton = createButton("→", UDim2.new(1, -50, 0.5, -20))
+RightButton.Activated:Connect(function()
+    RadarInfo.Position = RadarInfo.Position + Vector2.new(moveDistance, 0)
+end)
+
+local CloseButton = createButton("X", UDim2.new(1, -30, 0, 5))
+CloseButton.Size = UDim2.new(0, 25, 0, 25)
+CloseButton.Activated:Connect(function()
+    ControlFrame.Visible = false
+end)
+
+-- === نهاية واجهة التحكم ===
+
+
+-- === إنشاء مثلث اللاعب ===
+-- ننشئ المثلث مرة واحدة فقط خارج الحلقة
+local PlayerTriangle = Drawing.new("Triangle")
+PlayerTriangle.Visible = true
+PlayerTriangle.Thickness = 1
+PlayerTriangle.Filled = true
+PlayerTriangle.Color = Color3.new(1, 1, 1) -- لون أبيض واضح
+-- === نهاية إنشاء مثلث اللاعب ===
+
+
+-- الحلقة الرئيسية للتحديث
+coroutine.wrap(function()
+    local c 
+    c = game:service("RunService").RenderStepped:Connect(function()
+        local char = Player.Character
+        local rotationAngle = 0
+        if char and char.PrimaryPart then
+            local lookVector = char.PrimaryPart.CFrame.lookVector
+            rotationAngle = math.atan2(lookVector.X, lookVector.Z)
+        end
+
+        local cosA = math.cos(rotationAngle)
+        local sinA = math.sin(rotationAngle)
+
+        local function rotatePoint(point)
+            return Vector2.new(
+                point.X * cosA - point.Y * sinA,
+                point.X * sinA + point.Y * cosA
+            )
+        end
+
+        NorthText.Position = RadarInfo.Position + rotatePoint(LetterOffsets.North)
+        SouthText.Position = RadarInfo.Position + rotatePoint(LetterOffsets.South)
+        EastText.Position = RadarInfo.Position + rotatePoint(LetterOffsets.East)
+        WestText.Position = RadarInfo.Position + rotatePoint(LetterOffsets.West)
+
+        -- === تحديث مثلث اللاعب ===
+        if char and char.PrimaryPart then
+            local triangleSize = 8
+            -- تعريف نقاط المثلث الأساسية (قبل الدوران)
+            -- القاعدة في المنتصف، الرأس للأعلى
+            local tipPoint = Vector2.new(0, -triangleSize)
+            local leftBasePoint = Vector2.new(-triangleSize / 2, 0)
+            local rightBasePoint = Vector2.new(triangleSize / 2, 0)
+
+            -- تدوير النقاط بناءً على اتجاه اللاعب
+            local rotatedTip = rotatePoint(tipPoint)
+            local rotatedLeftBase = rotatePoint(leftBasePoint)
+            local rotatedRightBase = rotatePoint(rightBasePoint)
+
+            -- تحديث موقع المثلث على الشاشة
+            PlayerTriangle.PointA = RadarInfo.Position + rotatedTip
+            PlayerTriangle.PointB = RadarInfo.Position + rotatedLeftBase
+            PlayerTriangle.PointC = RadarInfo.Position + rotatedRightBase
+        end
+        -- === نهاية تحديث مثلث اللاعب ===
+
+        scanAngle = (scanAngle + 0.5) % 360
+        local radians = math.rad(scanAngle)
+        local endX = RadarInfo.Position.X + math.sin(radians) * RadarInfo.Radius
+        local endY = RadarInfo.Position.Y - math.cos(radians) * RadarInfo.Radius
+        ScanLine.From = RadarInfo.Position
+        ScanLine.To = Vector2.new(endX, endY)
+        
+        RadarBackground.Position = RadarInfo.Position
+        RadarBackground.Radius = RadarInfo.Radius
+        RadarBackground.Color = RadarInfo.RadarBack
+
+        RadarBorder.Position = RadarInfo.Position
+        RadarBorder.Radius = RadarInfo.Radius
+        RadarBorder.Color = RadarInfo.RadarBorder
+
+        RadarInnerCircle.Position = RadarInfo.Position
+        RadarInnerCircle.Radius = RadarInfo.Radius * 0.33
+        RadarInnerCircle.Color = RadarInfo.RadarBorder
+
+        RadarMidCircle.Position = RadarInfo.Position
+        RadarMidCircle.Radius = RadarInfo.Radius * 0.66
+        RadarMidCircle.Color = RadarInfo.RadarBorder
+
+        CrosshairH.From = RadarInfo.Position + Vector2.new(-RadarInfo.Radius, 0)
+        CrosshairH.To = RadarInfo.Position + Vector2.new(RadarInfo.Radius, 0)
+        CrosshairV.From = RadarInfo.Position + Vector2.new(0, -RadarInfo.Radius)
+        CrosshairV.To = RadarInfo.Position + Vector2.new(0, RadarInfo.Radius)
+    end)
+end)()
